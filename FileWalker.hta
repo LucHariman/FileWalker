@@ -1,0 +1,437 @@
+<html>
+<head><title>Explorateur de dossier</title>
+<hta:application 
+	ApplicationName="Explorer"
+	Border="none"
+	caption="no"
+	contextmenu="no" 
+	scroll="no" 
+	selection="no" 
+	SysMenu="no" 
+	singleinstance="yes" 
+	showintaskBar="yes">
+<style type=text/css>
+body {font-family: Verdana; background-color: black; border-style: none
+	scrollbar-face-color:black;
+scrollbar-highlight-color:black;
+scrollbar-3dlight-color:black;
+scrollbar-darkshadow-color:white;
+scrollbar-shadow-color:deepskyblue;
+scrollbar-arrow-color:black;
+scrollbar-track-color:black;}
+#fond {position: absolute; z-index: 0; filter: Alpha(opacity=30)}
+#dossierActuel {position: absolute; top: 10; left: 10; border-style: none}
+h3.titre {font-size: 14; font-weight: bold; color: white}
+a {font-size: 12; font-weight: normal; cursor: default; text-decoration: none}
+a:hover {color: white; background-color: black; text-decoration: underline overline}
+a.lecteur {color: magenta}
+a.dossier {color: deepskyblue}
+a.fichier {color: red}
+a.plus {color: white; font-family: monospace}
+a.plus:hover {text-decoration: none; background-color: transparent}
+#titreDossier {position: absolute; left: 10pt; top: 30pt; width: 250pt}
+#titreContenu {position: absolute; left: 270pt; top: 30pt}
+#divDossier {position: absolute; left: 10pt; top: 50pt; width: 250pt; overflow: auto}
+#divContenu {position: absolute; right: 0pt; top: 50pt; overflow: auto}
+#chemin {position: absolute; width: 20pt; height: 20pt; overflow: hidden; visibility: hidden; color: white}
+#controleFenetre {position: absolute; right: 0pt; top: 0pt}
+#controleFenetre table td {border-style: none; text-align: center}
+div.carre {background-color: deepskyblue; width: 12pt; height: 12pt; font: 12 'Arial Unicode MS'; filter: Alpha(opacity=70)}
+#boutonFermer {background-color: red}
+#filtre {position: absolute; background-color: buttonface; visibility: hidden}
+</style>
+<script language=jscript>
+function ObjetParId(nom) {
+    return window[nom];
+}
+
+function ObjetExistant(id) {
+    return window[id]?true:false;
+}
+</script>
+<script language=vbscript>
+Set Fso = CreateObject("Scripting.FileSystemObject")
+Set WshShell = CreateObject("WScript.Shell")
+w = (window.screen.width * 3) \ 4
+h = (window.screen.height * 3) \ 4
+x = (window.screen.width - w) \ 2
+y = (window.screen.width - w) \ 2
+bgpath = WshShell.RegRead("HKCU\Control Panel\Desktop\Wallpaper")
+
+Function CompterOccurence(str,occ)
+	dim str2, i
+	str2 = str
+	i = 0
+	Do Until InStr(str2,occ) = 0
+		str2 = Replace(str2,occ,"",1,1)
+		i = i + 1
+	Loop
+	CompterOccurence = i
+End Function
+
+Sub Enregistrer(id,path)
+	dim id2
+	id2 = id & "c"
+	If not ObjetExistant(id2) Then
+		window.chemin.insertAdjacentHTML "BeforeEnd", "<a id=" & id2 & ">" & path & "</a>"
+	Else
+		If ObjetParId(id2).innerText <> path Then
+			ObjetParId(id2).innerText = path
+		End If
+	End If
+End Sub
+
+Sub Explorer(id)
+	If not ObjetExistant(id) Then
+		Developper Left(id,InStrRev(id,"_")-1)
+	End If
+	Developper id
+	AfficherContenu id
+End Sub
+
+Sub Executer(id)
+	On Error Resume Next
+	WshShell.Run ObjetParId(id & "c").innerText
+	If Err.Number <> 0 Then
+		alert "Impossible d'ouvrir le fichier " & ObjetParId(id).innerText & "."
+	End If
+End Sub
+
+Function Normaliser(str)
+	dim str2
+	str2 = Replace(str,"/","\")
+	If InStrRev(str2,"\") <> Len(str2) Then
+		str2 = str2 & "\"
+	End If
+	Normaliser = str2
+End Function
+
+Sub ExaminerPlus(id)
+	dim signe
+	signe = Mid(ObjetParId(id).innerText,2,1)
+	If signe = "+" Then
+		Developper id
+	Else
+		Reduire id
+	End If
+End Sub
+
+Function LireAttrib(attr,attrStr)
+	dim Tableau, Chaine, Prov, Puiss
+	Tableau = Array("ReadOnly","Hidden","System","Volume","Directory","Archive","Alias","Compressed")
+	Chaine = ""
+	If attr = 0 Then
+		Chaine = "Normal"
+	Else
+		Prov = attr
+		Puiss = 7
+		Do Until Prov = 0
+			If Prov >= (2^Puiss) Then
+				Chaine = Chaine & Tableau(Puiss)
+				If Prov = (2^Puiss) Then
+					Exit Do
+				Else
+					Prov = Prov - (2^Puiss)
+				End If
+			End If
+			Puiss = Puiss - 1
+		Loop
+	End If
+	LireAttrib = InStr(Chaine,attrStr) <> 0
+End Function
+
+Function Visible(f)
+	v = true
+	t = Array("Archive","Hidden","ReadOnly","System")
+	For i = 0 to 3
+		If not ObjetParId(t(i)).checked and LireAttrib(f.Attributes,t(i)) then
+			v = false
+			Exit For
+		End If
+	Next
+	Visible = v
+End Function
+
+Sub ListerLecteurs
+	dim dc, i, id1, id2, id3, fonction1, fonction2, n
+	Set dc = Fso.Drives
+	window.dossiers.innerHTML = ""
+	i = 0
+	For Each d in dc
+		i = i + 1
+		id1 = "d" & i
+		id2 = id1 + "d"
+		id3 = id1 + "f"
+		fonction1 = "ExaminerPlus(" & chr(39) & id1 & chr(39) & ")"
+		fonction2 = "Explorer(" & chr(39) & id1 & chr(39) & ")"
+		n = "<div><a href=# class=plus id=" & id1 & " onClick=" & fonction1 & ">[+] </a>"
+		n = n & "<a href=# class=lecteur id=" & id2 & " onClick=" & fonction2 & ">"
+		If d.DriveType = 3 Then
+			n = n & d.ShareName
+		ElseIf d.IsReady Then
+			n = n & d.VolumeName
+		Else
+			Select Case d.DriveType
+				Case 0 
+					n = n & "Lecteur inconnu"
+				Case 1
+					n = n & "Amovible"
+				Case 4
+					n = n & "Disque CD-ROM"
+				Case 5
+					n = n & "RAMDisk"
+			End Select
+		End If
+		n = n & " (" & d.DriveLetter & ":)</a>"
+		n = n & "<font id=" & id3 & "></font></div>"
+		window.dossiers.insertAdjacentHTML "BeforeEnd", n
+		Enregistrer id1, d.Path
+	Next
+End Sub
+
+Sub AfficherContenu(id)
+	window.document.body.style.cursor = "wait"
+	On Error Resume Next
+	dim path, fld, fldc, sfld, i, id1, id2, id0, fonction, n, fc, f
+	window.contenus.innerHTML = ""
+	path = ObjetParId(id & "c").innerText
+	window.dossierActuel.value = path
+	Set fld = fso.GetFolder(Normaliser(path))
+	Set fldc = fld.SubFolders
+	i = 0
+	For Each sfld in fldc
+		i = i + 1
+		id1 = id & "_" & i
+		id2 = id1 & "e"
+		id0 = id1 & "i"
+		fonction = "Explorer(" & chr(39) & id1 & chr(39) & ")"
+		n = "<div id=" & id0 & "><nobr><a href=# class=dossier id=" & id2 & " onClick=" & fonction & ">" & sfld.Name & "</a></nobr></div>"
+		window.contenus.insertAdjacentHTML "BeforeEnd", n
+		Enregistrer id1, sfld.Path
+		bulle = "Créé le " & sfld.DateCreated & chr(13)
+		bulle = bulle & "Modifié le " & sfld.DateLastModified & chr(13)
+		bulle = bulle & "Dernier accès le " & sfld.DateLastAccessed
+		ObjetParId(id0).title = bulle
+	Next
+	Set fc = fld.Files
+	i = 0
+	For Each f in fc
+		i = i + 1
+		id1 = "f" & i
+		id0 = id1 & "i"
+		fonction = "Executer(" & chr(39) & id1 & chr(39) & ")"
+		n = "<div id=" & id0 & "><nobr><a href=# class=fichier id=" & id1 & " onClick=" & fonction & ">" & f.Name & "</a></nobr></div>"
+		window.contenus.insertAdjacentHTML "BeforeEnd", n
+		Enregistrer id1, f.ShortPath
+		bulle = "Créé le " & f.DateCreated & chr(13)
+		bulle = bulle & "Modifié le " & f.DateLastModified & chr(13)
+		bulle = bulle & "Dernier accès le " & f.DateLastAccessed
+		ObjetParId(id0).title = bulle
+	Next
+	window.document.body.style.cursor = "default"
+End Sub
+
+Sub Reduire(id)
+	ObjetParId(id).innerText = "[+] "
+	ObjetParId(id & "f").innerText = ""
+	AfficherContenu id
+End Sub
+
+Sub Developper(id)
+	On Error Resume Next
+	dim path, fld, fldc, degree, espace, i, sfld, id1, id2, id3, id0, n, sfldc
+	path = Normaliser(ObjetParId(id & "c").innerText)
+	Set fld = Fso.GetFolder(path)
+	Set fldc = fld.SubFolders
+	If fldc.Count = 0 Then
+		ObjetParId(id).style.visibility = "hidden"
+	Else
+		ObjetParId(id).innerText = "[-] "
+		ObjetParId(id & "f").innerText = ""
+		degre = CompterOccurence(id,"_")
+		espace = Space(5 * (degre + 1))
+		espace = Replace(espace," ","&nbsp;")
+		i = 0
+		For Each sfld in fldc
+			i = i + 1
+			id1 = id & "_" & i
+			id0 = id1 & "h"
+			id2 = id1 & "d"
+			id3 = id1 & "f"
+			fonction1 = "ExaminerPlus(" & chr(34) & id1 & chr(34) & ")"
+			fonction2 = "Explorer(" & chr(39) & id1 & chr(39) & ")"
+			n = "<div id=" & id0 & "><nobr><a>" & espace & "</a>"
+			n = n & "<a href=# class=plus id=" & id1 & " onClick=" & fonction1 & ">[+] </a>"
+			n = n & "<a href=# class=dossier id=" & id2 & " onClick=" & fonction2 & ">" & sfld.Name & "</a></nobr>"
+			n = n & "<font id=" & id3 & "></font></div>"
+			ObjetParId(id & "f").insertAdjacentHTML "BeforeEnd", n
+			Set sfldc = sfld.SubFolders
+			If sfldc.Count = 0 Then
+				ObjetParId(id1).style.visibility = "hidden"
+			End If
+			Enregistrer id1, sfld.Path
+		Next
+	End If
+End Sub
+
+Sub FiltrerTouche
+	If window.event.keyCode = 13 Then
+		window.event.returnValue = false
+		OuvrirDossier(window.dossierActuel.value)
+	Else
+		window.event.returnValue = true
+	End If
+End Sub
+
+Sub OuvrirDossier(p)
+	Dim path, path2, id, id2, i, dc, d, dossier, sousDossier, fld, fldc, sfld
+	path = Fso.GetAbsolutePathName(p)
+	path = Normaliser(path)
+	If Fso.FolderExists(path) Then
+		id = ""
+		i = 0
+		Set dc = Fso.Drives
+		For Each d in dc
+			i = i + 1
+			If UCase(d.DriveLetter) = UCase(Left(path,1)) Then
+				id = "d" & i
+				Exit For
+			End If
+		Next
+		dossier = ""
+		path2 = ""
+		sousDossier = ""
+		Do
+			dossier = Left(path,InStr(Len(dossier)+1,path,"\"))
+			If dossier = path Then
+				Exit Do
+			End If
+			path2 = Replace(path,dossier,"",1,1)
+			sousDossier = Left(path2,InStr(path2,"\")-1)
+			Set fld = Fso.GetFolder(dossier)
+			Set fldc = fld.SubFolders
+			i = 0
+			For Each sfld in fldc
+				i = i + 1
+				If sfld.Name = sousDossier Then
+					id = id & "_" & i
+					Exit For
+				End If
+			Next
+		Loop
+		id2 = id
+		Do
+			If ObjetExistant(id2) Then
+				Explorer id2
+				Exit Do
+			Else
+				id2 = Left(id2,InStrRev(id2,"_")-1)
+			End If
+		Loop
+		id = id & "_"
+		Do Until id = id2 & "_"
+			id2 = Left(id,InStr(Len(id2)+2,id,"_")-1)
+			Developper id2
+		Loop
+		AfficherContenu id2
+	Else
+		alert "Dossier introuvable"
+	End If
+End Sub
+
+agrandie = false
+reduit = false
+
+Sub ReduireFenetre
+	If reduit Then
+		If agrandie Then
+			AgrandirFenetre
+		Else
+			RestaurerFenetre			
+		End If
+	window.boutonReduire.title = "Réduire"
+	Else
+		x2 = window.dossierActuel.offsetWidth + window.controleFenetre.offsetWidth + 10
+		y2 = window.dossierActuel.offsetHeight + 10
+		window.resizeTo x2,y2
+		x2 = window.screen.availWidth - x2
+		y2 = window.screen.availHeight - y2
+		window.moveTo x2,y2
+		If agrandie Then
+			window.boutonReduire.title = "Agrandir"
+		Else
+			window.boutonReduire.title = "Niveau inférieur"
+		End If
+	End If
+	reduit = not reduit
+End Sub
+
+Sub AgrandirFenetre
+	w2 = window.screen.availWidth
+	h2 = window.screen.availHeight
+	window.resizeTo w2,h2
+	window.moveTo 0, 0
+	window.divDossier.style.height = h2 - 80
+	With window.divContenu.style
+		.height = h2 - 80
+		.width = w2 - window.divDossier.offsetWidth - 25
+	End With
+	With window.fond
+		.style.left = 0
+		.style.top = 0
+	End With
+	window.boutonAgrandir.title = "Niveau inférieur"
+End Sub
+
+Sub RestaurerFenetre
+	window.resizeTo w,h
+	window.moveTo x,y
+	window.divDossier.style.height = h - 80
+	With window.divContenu.style
+		.height = h - 80
+		.width = w - window.divDossier.offsetWidth - 25
+	End With
+	With window.fond
+		.style.left = -x
+		.style.top = -y
+	End With
+	window.boutonAgrandir.title = "Agrandir"
+End Sub
+
+Sub Initialiser
+	With window.fond
+		.src = bgpath
+		.width = window.screen.width
+		.height = window.screen.height
+	End With
+	RestaurerFenetre
+	ListerLecteurs
+	OuvrirDossier ""
+End Sub
+
+Sub AgrandirOuRestaurer
+	If window.fond.offsetLeft = 0 Then
+		RestaurerFenetre
+	Else
+		AgrandirFenetre
+	End If
+	agrandie = not agrandie
+	reduit = false
+End Sub
+</script>
+</head>
+<body onLoad="Initialiser()">
+<img id="fond">
+<input type="text" id="dossierActuel" size=40 onKeypress="FiltrerTouche()">
+<div id="controleFenetre"><table cellspacing=5>
+<td><div class="carre" id="boutonReduire" onMouseOver="this.style.filter='Alpha(opacity=100)'" onMouseOut="this.style.filter = 'Alpha(opacity=70)'" onClick="ReduireFenetre()" title="Réduire">_</div></td>
+<td><div class="carre" id="boutonAgrandir" onMouseOver="this.style.filter='Alpha(opacity=100)'" onMouseOut="this.style.filter = 'Alpha(opacity=70)'" onClick="AgrandirOuRestaurer()" title="Agrandir"></div></td>
+<td><div class="carre" id="boutonFermer" onMouseOver="this.style.filter='Alpha(opacity=100)'" onMouseOut="this.style.filter = 'Alpha(opacity=70)'" onClick="window.close()" title="Fermer">X</div></td>
+</table></div>
+<h3 id="titreDossier" class="titre">Dossiers</h3>
+<div id="divDossier"><h3 id="dossiers"></h3></div>
+<h3 id="titreContenu" class="titre">Contenus</h3>
+<div id="divContenu"><h3 id="contenus"></h3></div>
+<div id="chemin"></div>
+</body>
+</html>
